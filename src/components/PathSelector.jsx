@@ -1,49 +1,43 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './PathSelector.css';
 
 const PathSelector = ({ path, onPathChange, selectedRequests, suggestedPath, onSuggestedPathSelect }) => {
   const [error, setError] = useState(null);
   const [inputValue, setInputValue] = useState(path);
+  const [showHelp, setShowHelp] = useState(false);
+  const helpPanelRef = useRef(null);
 
   // Update input value when path prop changes
   useEffect(() => {
     setInputValue(path);
   }, [path]);
 
-  const validatePath = (pathToValidate) => {
-    // Basic validation for JQ path format
-    if (!pathToValidate) return true; // Empty path is valid
+  // Close help panel when clicking outside
+  useEffect(() => {
+    if (!showHelp) return;
     
-    // Check for invalid characters
-    const invalidChars = /[^a-zA-Z0-9_.]/g;
-    if (invalidChars.test(pathToValidate)) {
-      return false;
-    }
+    const handleClickOutside = (event) => {
+      if (helpPanelRef.current && !helpPanelRef.current.contains(event.target) && 
+          !event.target.classList.contains('help-button')) {
+        setShowHelp(false);
+      }
+    };
     
-    // Check for consecutive dots
-    if (pathToValidate.includes('..')) {
-      return false;
-    }
-    
-    // Check for starting or ending with a dot
-    if (pathToValidate.startsWith('.') || pathToValidate.endsWith('.')) {
-      return false;
-    }
-    
-    return true;
-  };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showHelp]);
 
   const handleInputChange = (e) => {
     const newPath = e.target.value;
     setInputValue(newPath);
-    
-    // Validate the path
-    if (validatePath(newPath)) {
-      setError(null);
+
+    try {
       onPathChange(newPath); // Update the path immediately if valid
-    } else {
+      setError(null);
+    } catch (e) {
       setError('Invalid path format');
-      // Still update the input value but don't call onPathChange
     }
   };
 
@@ -74,21 +68,55 @@ const PathSelector = ({ path, onPathChange, selectedRequests, suggestedPath, onS
     }
   };
 
+  const toggleHelp = () => {
+    setShowHelp(!showHelp);
+  };
+
   return (
     <div className="path-selector">
       <div className="path-input-container">
         <div className="path-input-row">
-          <label htmlFor="data-path" className="path-label">Data Path:</label>
+          <label htmlFor="data-path" className="path-label">JQ Path:</label>
           <input
             id="data-path"
             type="text"
             value={inputValue}
             onChange={handleInputChange}
-            placeholder="Click on a JSON field to select a path"
+            placeholder="Enter JQ path (e.g., .data.items[0].name)"
             className={`path-input ${error ? 'error' : ''}`}
           />
+          <button 
+            type="button" 
+            className="help-button"
+            onClick={toggleHelp}
+            title="Show JQ syntax help"
+            aria-label="Show JQ syntax help"
+          >
+            ?
+          </button>
         </div>
         {error && <div className="path-error">{error}</div>}
+        
+        {showHelp && (
+          <div className="jq-help-panel" ref={helpPanelRef}>
+            <h4>JQ Path Syntax Examples:</h4>
+            <ul>
+              <li><code>.</code> - The entire JSON object</li>
+              <li><code>.property</code> - Access a property</li>
+              <li><code>.property.nested</code> - Access a nested property</li>
+              <li><code>.array[0]</code> - Access the first element of an array</li>
+              <li><code>.array[]</code> - Iterate over all elements in an array</li>
+              <li><code>.array[].property</code> - Access a property from each array element</li>
+              <li><code>.property | length</code> - Get the length of an array or string</li>
+              <li><code>.[] | select(.property == "value")</code> - Filter array elements</li>
+            </ul>
+            <p>
+              <a href="https://stedolan.github.io/jq/manual/" target="_blank" rel="noopener noreferrer">
+                Full JQ Documentation
+              </a>
+            </p>
+          </div>
+        )}
         
         {suggestedPath && (
           <div className="path-suggestion-container">
@@ -111,10 +139,6 @@ const PathSelector = ({ path, onPathChange, selectedRequests, suggestedPath, onS
             </div>
           </div>
         )}
-        
-        <div className="path-help">
-          <p>Click on a JSON field to select its path, or type manually. Examples: <code>data</code>, <code>data.items</code>, <code>results.0.id</code></p>
-        </div>
       </div>
     </div>
   );

@@ -4,6 +4,8 @@
   "private": true,
   "homepage": ".",
   "dependencies": {
+    "@craco/craco": "^7.1.0",
+    "jq-web": "^0.6.1",
     "jszip": "^3.10.1",
     "papaparse": "^5.5.2",
     "react": "^18.3.1",
@@ -14,10 +16,11 @@
     "warcio": "^2.4.3"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build && rm -rf docs && mv build docs",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "start": "craco start",
+    "build": "craco build && rm -rf docs && mv build docs",
+    "test": "craco test",
+    "eject": "react-scripts eject",
+    "deploy": "npm run build && scp -r docs/* jsoma:/var/www/jonathansoma.com/current/warc2data/"
   },
   "eslintConfig": {
     "extends": [
@@ -35,5 +38,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "copy-webpack-plugin": "^13.0.0"
   }
 }

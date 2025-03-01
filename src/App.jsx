@@ -5,6 +5,7 @@ import JsonViewer from './components/JsonViewer';
 import PathSelector from './components/PathSelector';
 import CsvPreview from './components/CsvPreview';
 import PageBrowser from './components/PageBrowser';
+import DebugLog from './components/DebugLog';
 import './App.css';
 import { processArchiveFiles, extractJsonContent, generateCsvPreview, exportToCsv } from './utils/archiveProcessor';
 
@@ -25,44 +26,58 @@ function App() {
   const [pages, setPages] = useState([]);
   const [selectedPages, setSelectedPages] = useState([]);
   const [userDeselectedAll, setUserDeselectedAll] = useState(false);
+  const [debugLogs, setDebugLogs] = useState([]);
 
   // Filter files when search term or selected pages change
   useEffect(() => {
+    
+    // Debug check for jsonFiles
+    if (!jsonFiles || !Array.isArray(jsonFiles)) {
+      setFilteredFiles([]);
+      return;
+    }
+    
     let filtered = [...jsonFiles];
     
     // Filter by search term
     if (searchTerm) {
-      const term = searchTerm.toLowerCase();
+      const lowerSearchTerm = searchTerm.toLowerCase();
       filtered = filtered.filter(file => 
-        file.path.toLowerCase().includes(term) || 
-        (file.pathname && file.pathname.toLowerCase().includes(term)) ||
-        (file.hostname && file.hostname.toLowerCase().includes(term))
+        (file.path && file.path.toLowerCase().includes(lowerSearchTerm)) ||
+        (file.pathname && file.pathname.toLowerCase().includes(lowerSearchTerm))
       );
     }
     
-    // If no pages are selected, show no files
-    if (selectedPages.length === 0 && pages.length > 0) {
+    // Filter by selected pages only if we have pages AND selected pages
+    if (pages.length > 0 && selectedPages.length > 0) {      
+      const selectedPageIds = selectedPages.map(page => page.id);
+            
+      // Count files with different types of associations
+      const withParentPage = filtered.filter(file => file.parentPageUrl).length;
+      const withPage = filtered.filter(file => file.page).length;
+      const withoutAssociation = filtered.filter(file => !file.parentPageUrl && !file.page).length;
+      console.log(`Files with: parentPageUrl=${withParentPage}, page=${withPage}, no association=${withoutAssociation}`);
+      
+      // FIXED: Properly handle page associations
+      filtered = filtered.filter(file => {
+        if (file.parentPageId) {
+          return selectedPageIds.includes(file.parentPageId);
+        }
+        // If file has no page association, keep it
+        return true;
+      });
+      
+    } else if (pages.length > 0 && selectedPages.length === 0) {
+      // If we have pages but none are selected, show no files
       filtered = [];
     }
-    // Filter by selected pages if there are any selected
-    else if (selectedPages.length > 0) {
-      // Get the URLs of selected pages
-      const selectedPageUrls = selectedPages.map(page => page.url);
-      
-      // Filter files that belong to selected pages
-      filtered = filtered.filter(file => 
-        // Match by parentPageUrl if available
-        (file.parentPageUrl && selectedPageUrls.includes(file.parentPageUrl)) ||
-        // Or match by hostname if no parentPageUrl but page hostname matches
-        (!file.parentPageUrl && file.page && selectedPages.some(page => page.hostname === file.page))
-      );
-    }
-    
+        
+    // IMPORTANT: Always update filteredFiles, even if the array is empty
     setFilteredFiles(filtered);
   }, [jsonFiles, searchTerm, selectedPages, pages.length]);
 
-  // Auto-select all pages when they're loaded, but respect when user manually deselects all
-  useEffect(() => {
+  // Auto-select all pages when they are loaded
+  useEffect(() => {    
     if (pages.length > 0 && selectedPages.length === 0 && !userDeselectedAll) {
       setSelectedPages([...pages]);
     }
@@ -182,18 +197,39 @@ function App() {
         console.log("Processing files:", acceptedFiles.map(f => f.name));
         // Process WARC/WACZ files and extract JSON content
         setProcessingStatus('Extracting API requests from archive files...');
-        const { jsonFiles: extractedJsonFiles, pages: extractedPages } = await processArchiveFiles(acceptedFiles);
-        console.log(`Found ${extractedJsonFiles.length} JSON files and ${extractedPages.length} pages`);
+        const { jsonFiles: extractedJsonFiles, pages: extractedPages, debugLogs: extractedLogs } = await processArchiveFiles(acceptedFiles);
+                
+        // CRITICAL FIX: Set state in the correct order to avoid race conditions
+        // First set the JSON files directly
         setJsonFiles(extractedJsonFiles);
+        
+        // Then set the pages and selected pages
         setPages(extractedPages);
-        // Auto-select all pages
-        setSelectedPages(extractedPages);
+        
+        // IMPORTANT: Set selected pages AFTER setting pages to ensure the auto-select effect works
+        if (extractedPages.length > 0) {
+          setSelectedPages(extractedPages); // Auto-select all pages
+        }
+        
+        setFilteredFiles(extractedJsonFiles);
+        
+        // Set debug logs and status
+        setDebugLogs(extractedLogs);
         setProcessingStatus(`Found ${extractedJsonFiles.length} API requests from ${extractedPages.length} pages`);
+        
+        // Automatically suggest a path if we have files
+        if (extractedJsonFiles.length > 0) {
+          // Select the first file to trigger the path suggestion logic
+          setSelectedRequests([extractedJsonFiles[0]]);
+          handleFileSelect(extractedJsonFiles[0]);
+        }
       } catch (err) {
         console.error("Error processing files:", err);
         setError(`Error processing files: ${err.message}`);
         setJsonFiles([]);
+        setFilteredFiles([]); // Also clear filtered files
         setPages([]);
+        setSelectedPages([]);
         setProcessingStatus('');
       } finally {
         setIsLoading(false);
@@ -388,15 +424,9 @@ function App() {
         <input {...getInputProps()} />
         {isLoading ? (
           <p>{processingStatus || 'Processing files, please wait...'}</p>
-        ) : isDragActive ? (
-          <p>Drop the WARC/WACZ files here...</p>
         ) : (
           <div>
             <p>Drag and drop WARC/WACZ files here, or click to select files</p>
-            <p className="dropzone-hint">
-              The tool will extract API requests (JSON responses) from the archive files, 
-              including those made by JavaScript fetch/XHR calls.
-            </p>
           </div>
         )}
       </div>
@@ -454,6 +484,10 @@ function App() {
             data={csvPreview} 
             onExport={handleExport} 
           />
+          
+          {debugLogs.length > 0 && (
+            <DebugLog logs={debugLogs} />
+          )}
         </div>
       </div>
     </div>

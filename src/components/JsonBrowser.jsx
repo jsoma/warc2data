@@ -54,14 +54,15 @@ const JsonBrowser = ({ jsonFiles, onFileSelect, selectedRequests, onRequestToggl
   };
 
   // Update sorted files when files or sort method changes
-  useEffect(() => {
-    if (!jsonFiles || !Array.isArray(jsonFiles)) {
+  useEffect(() => {    
+    if (!jsonFiles || !Array.isArray(jsonFiles) || jsonFiles.length === 0) {
       setSortedFiles([]);
       return;
     }
     
+    // Use a simple array spread which is sufficient for our sorting needs
     let newSortedFiles = [...jsonFiles];
-    
+        
     if (sortBy === 'size-desc') {
       newSortedFiles.sort((a, b) => getContentSize(b) - getContentSize(a));
     } else if (sortBy === 'size-asc') {
@@ -74,6 +75,7 @@ const JsonBrowser = ({ jsonFiles, onFileSelect, selectedRequests, onRequestToggl
       newSortedFiles.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     }
     
+    console.log("JsonBrowser: Setting sortedFiles with", newSortedFiles.length, "files");
     setSortedFiles(newSortedFiles);
   }, [jsonFiles, sortBy]);
 
